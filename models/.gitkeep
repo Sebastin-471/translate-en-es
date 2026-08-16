@@ -1,0 +1,3 @@
+# Placeholder for downloaded/converted model files.
+# This directory is populated at runtime by the ModelManager.
+# Add to .gitignore — models should not be committed.

@@ -1,0 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "translate-en-es"
+version = "0.1.0"
+description = "Real-time system audio translation (EN→ES) for video calls"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "translate-en-es contributors" }]
+
+dependencies = [
+    # --- Core async / config ---
+    "pyyaml>=6.0.1",
+    # --- Logging ---
+    "structlog>=24.4.0",
+    # --- VAD ---
+    "silero-vad>=5.1",
+    "torch>=2.2.0",
+    "torchaudio>=2.2.0",
+    # --- ASR ---
+    "faster-whisper>=1.1.0",
+    # --- MT ---
+    "ctranslate2>=4.4.0",
+    "transformers>=4.40.0",
+    "sentencepiece>=0.2.0",
+    # --- Hotkeys ---
+    "pynput>=1.7.6",
+]
+
+[project.optional-dependencies]
+cuda = [
+    # CUDA-enabled PyTorch (user installs via --index-url from PyTorch repo)
+    # This extra is a marker; actual CUDA wheels come from:
+    #   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+]
+windows = [
+    "PyAudioWPatch>=0.2.12.6",
+    "pywin32>=306",
+]
+linux = [
+    # PipeWire/PulseAudio capture uses subprocess (pw-record / parec)
+    # No extra pip packages needed; system packages required:
+    #   - pipewire / pulseaudio-utils
+    "sounddevice>=0.5.0",
+]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.24.0",
+    "mypy>=1.10.0",
+    "ruff>=0.5.0",
+    "coverage>=7.5.0",
+    "types-PyYAML>=6.0.12",
+]
+
+[project.scripts]
+translate-en-es = "translator.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/translator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "gpu: marks tests that require a CUDA GPU (deselect with '-m \"not gpu\"')",
+    "integration: marks integration tests (deselect with '-m \"not integration\"')",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+packages = ["translator"]
+mypy_path = "src"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "TCH"]
