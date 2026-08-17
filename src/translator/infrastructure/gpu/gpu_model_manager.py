@@ -202,7 +202,7 @@ class GPUModelManager:
             if torch.cuda.is_available():
                 self._detected_device = DeviceType.CUDA
                 gpu_name = torch.cuda.get_device_name(self._device_index)
-                vram_mb = torch.cuda.get_device_properties(self._device_index).total_mem / (
+                vram_mb = torch.cuda.get_device_properties(self._device_index).total_memory / (
                     1024 * 1024
                 )
                 logger.info(

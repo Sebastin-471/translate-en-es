@@ -26,8 +26,14 @@ dependencies = [
     "ctranslate2>=4.4.0",
     "transformers>=4.40.0",
     "sentencepiece>=0.2.0",
+    "sacremoses>=0.1.1",
+    "pystray>=0.19.5",
+    "customtkinter>=6.0.0",
+    "Pillow>=10.0.0",
     # --- Hotkeys ---
     "pynput>=1.7.6",
+    "PyAudioWPatch>=0.2.12.6; sys_platform == 'win32'",
+    "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -35,10 +41,6 @@ cuda = [
     # CUDA-enabled PyTorch (user installs via --index-url from PyTorch repo)
     # This extra is a marker; actual CUDA wheels come from:
     #   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
-]
-windows = [
-    "PyAudioWPatch>=0.2.12.6",
-    "pywin32>=306",
 ]
 linux = [
     # PipeWire/PulseAudio capture uses subprocess (pw-record / parec)

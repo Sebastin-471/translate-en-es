@@ -20,7 +20,7 @@ class AudioConfig:
 
     backend: str = "wasapi"
     sample_rate: int = 16_000
-    chunk_duration_ms: int = 30
+    chunk_duration_ms: int = 32
     channels: int = 1
     file_path: str = ""
     device_name: str = ""

@@ -15,8 +15,8 @@ audio:
   # Sample rate in Hz — must be 16000 for Silero VAD / Whisper compatibility
   sample_rate: 16000
 
-  # Audio chunk duration in milliseconds sent to the VAD
-  chunk_duration_ms: 30
+  # Audio chunk duration in milliseconds sent to the VAD (Silero requires >= 512 samples, which is 32ms at 16kHz)
+  chunk_duration_ms: 32
 
   # Channels: 1 = mono (required by the pipeline)
   channels: 1

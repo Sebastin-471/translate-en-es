@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from translator.core.events import TranscriptResult, TranslationResult
+from translator.core.model_manager import DeviceType, ModelManager
 
 if TYPE_CHECKING:
     from translator.core.config import MTConfig
@@ -41,8 +42,10 @@ class MarianMTEngine:
     This class satisfies both the MTEngine and ModelLifecycle Protocols.
     """
 
-    def __init__(self, config: MTConfig) -> None:
+    def __init__(self, config: MTConfig, model_manager: ModelManager) -> None:
         self._config = config
+        self._model_manager = model_manager
+        self._model_name = "marian_mt"
         self._translator: Any = None  # ctranslate2.Translator
         self._tokenizer: Any = None  # transformers.AutoTokenizer
         self._loaded = False
@@ -139,32 +142,44 @@ class MarianMTEngine:
             logger.info("mt_model_converted", output_dir=str(ct2_dir))
 
         # Load CTranslate2 translator
-        device = self._resolve_device()
+        device_str = self._resolve_device()
+        dev_type = DeviceType.CUDA if device_str == "cuda" else DeviceType.CPU
+        
+        # Estimate VRAM (MarianMT is around ~300MB)
+        vram_estimate = 300
+
         logger.info(
             "mt_model_loading",
             model_dir=str(ct2_dir),
-            device=device,
+            device=device_str,
             compute_type=self._config.compute_type,
         )
 
+        await self._model_manager.register_model(self._model_name, "mt", vram_estimate)
+
+        def _loader() -> Any:
+            return ctranslate2.Translator(
+                str(ct2_dir),
+                device=device_str,
+                compute_type=self._config.compute_type,
+            )
+
         start = time.monotonic()
-        self._translator = ctranslate2.Translator(
-            str(ct2_dir),
-            device=device,
-            compute_type=self._config.compute_type,
-        )
+        self._translator = await self._model_manager.load_model(self._model_name, _loader, dev_type)
         elapsed = time.monotonic() - start
 
         self._loaded = True
         logger.info(
             "mt_model_loaded",
             model=model_name,
-            device=device,
+            device=device_str,
             load_time_s=round(elapsed, 2),
         )
 
     async def unload_model(self) -> None:
         """Unload the model and free resources."""
+        if self._loaded:
+            await self._model_manager.unload_model(self._model_name)
         self._translator = None
         self._tokenizer = None
         self._loaded = False

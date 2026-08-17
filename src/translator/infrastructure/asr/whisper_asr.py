@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from translator.core.events import TranscriptResult, VADSegment
+from translator.core.model_manager import DeviceType, ModelManager
 
 if TYPE_CHECKING:
     from translator.core.config import ASRConfig
@@ -36,8 +37,10 @@ class WhisperASREngine:
     This class satisfies both the ASREngine and ModelLifecycle Protocols.
     """
 
-    def __init__(self, config: ASRConfig) -> None:
+    def __init__(self, config: ASRConfig, model_manager: ModelManager) -> None:
         self._config = config
+        self._model_manager = model_manager
+        self._model_name = "whisper"
         self._model: Any = None
         self._loaded = False
 
@@ -99,35 +102,46 @@ class WhisperASREngine:
                 "faster-whisper is required. Install with: pip install faster-whisper"
             ) from e
 
-        device = self._resolve_device()
+        device_str = self._resolve_device()
+        dev_type = DeviceType.CUDA if device_str == "cuda" else DeviceType.CPU
         model_path = self._config.model_path or self._config.model_size
+        
+        # Estimate VRAM
+        vram_estimate = 1500 if "large" in model_path else (500 if "small" in model_path else 200)
 
         logger.info(
             "asr_model_loading",
             model=model_path,
-            device=device,
+            device=device_str,
             compute_type=self._config.compute_type,
         )
 
+        await self._model_manager.register_model(self._model_name, "asr", vram_estimate)
+
+        def _loader() -> Any:
+            return WhisperModel(
+                model_path,
+                device=device_str,
+                compute_type=self._config.compute_type,
+                cpu_threads=self._config.cpu_threads,
+            )
+
         start = time.monotonic()
-        self._model = WhisperModel(
-            model_path,
-            device=device,
-            compute_type=self._config.compute_type,
-            cpu_threads=self._config.cpu_threads,
-        )
+        self._model = await self._model_manager.load_model(self._model_name, _loader, dev_type)
         elapsed = time.monotonic() - start
 
         self._loaded = True
         logger.info(
             "asr_model_loaded",
             model=model_path,
-            device=device,
+            device=device_str,
             load_time_s=round(elapsed, 2),
         )
 
     async def unload_model(self) -> None:
         """Unload the model and free resources."""
+        if self._loaded:
+            await self._model_manager.unload_model(self._model_name)
         self._model = None
         self._loaded = False
         logger.info("asr_model_unloaded")

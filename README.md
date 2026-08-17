@@ -26,7 +26,9 @@ pip install -e ".[dev]"
 python -m translator.app --config config.yaml
 ```
 
-To run in mock mode (no GPU required):
+> **Note:** The first time you run the application without `--mock`, it will automatically download and cache the AI models (Silero VAD, Faster-Whisper, and MarianMT). This may take several minutes depending on your internet connection (approx. 1.5GB total).
+
+To run in mock mode (simulated engines, no GPU or downloads required):
 ```bash
 python -m translator.app --mock
 ```

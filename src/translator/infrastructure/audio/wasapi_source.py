@@ -130,16 +130,26 @@ class WASAPIAudioSource:
         except OSError:
             return None
 
-        default_output_idx = wasapi_info.get("defaultOutputDevice", -1)
-        if default_output_idx < 0:
-            return None
-
-        # Search for loopback device matching the default output
+        # If a specific device is not requested, try to find the loopback for the default output
         target_name = self._config.device_name
+        if not target_name:
+            default_loopback_idx = wasapi_info.get("defaultLoopbackDevice", -1)
+            if default_loopback_idx is not None and default_loopback_idx >= 0:
+                dev = pa.get_device_info_by_index(default_loopback_idx)
+                return dict(dev)
+            
+            # Fallback: get name of default output device and search for its loopback
+            default_out_idx = wasapi_info.get("defaultOutputDevice", -1)
+            if default_out_idx is not None and default_out_idx >= 0:
+                out_dev = pa.get_device_info_by_index(default_out_idx)
+                # The loopback device will usually have the exact same name plus "[Loopback]"
+                # So we use the original name as the target to search for
+                target_name = out_dev.get("name", "").replace(" [Loopback]", "")
+
+        # Otherwise, search for a loopback device matching the name
         for i in range(pa.get_device_count()):
             dev = pa.get_device_info_by_index(i)
-            # Loopback devices are input devices with "[Loopback]" in the name
-            if dev.get("maxInputChannels", 0) > 0 and "[Loopback]" in dev.get("name", ""):
+            if dev.get("maxInputChannels", 0) > 0 and dev.get("isLoopbackDevice", "[Loopback]" in dev.get("name", "")):
                 if target_name and target_name.lower() not in dev["name"].lower():
                     continue
                 return dict(dev)

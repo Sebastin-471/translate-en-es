@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         UIRenderer,
         VADEngine,
     )
+    from translator.core.model_manager import ModelManager
 
 logger = structlog.get_logger(__name__)
 
@@ -80,7 +81,7 @@ def _create_audio_source(config: AppConfig) -> AudioSource:
     raise ValueError(f"Unknown audio backend: '{backend}'")
 
 
-def _create_vad_engine(config: AppConfig) -> VADEngine:
+def _create_vad_engine(config: AppConfig, model_manager: ModelManager) -> VADEngine:
     """Create the VAD engine (real or mock)."""
     if config.pipeline.mock_mode:
         from translator.infrastructure.mock.mock_vad import MockVADEngine
@@ -91,10 +92,10 @@ def _create_vad_engine(config: AppConfig) -> VADEngine:
 
     from translator.infrastructure.vad.silero_vad import SileroVADEngine
 
-    return SileroVADEngine(config.vad, sample_rate=config.audio.sample_rate)
+    return SileroVADEngine(config.vad, model_manager, sample_rate=config.audio.sample_rate)
 
 
-def _create_asr_engine(config: AppConfig) -> ASREngine:
+def _create_asr_engine(config: AppConfig, model_manager: ModelManager) -> ASREngine:
     """Create the ASR engine (real or mock)."""
     if config.pipeline.mock_mode:
         from translator.infrastructure.mock.mock_asr import MockASREngine
@@ -106,10 +107,10 @@ def _create_asr_engine(config: AppConfig) -> ASREngine:
 
     from translator.infrastructure.asr.whisper_asr import WhisperASREngine
 
-    return WhisperASREngine(config.asr)
+    return WhisperASREngine(config.asr, model_manager)
 
 
-def _create_mt_engine(config: AppConfig) -> MTEngine:
+def _create_mt_engine(config: AppConfig, model_manager: ModelManager) -> MTEngine:
     """Create the MT engine (real or mock)."""
     if config.pipeline.mock_mode:
         from translator.infrastructure.mock.mock_mt import MockMTEngine
@@ -122,7 +123,7 @@ def _create_mt_engine(config: AppConfig) -> MTEngine:
 
     from translator.infrastructure.mt.marian_mt import MarianMTEngine
 
-    return MarianMTEngine(config.mt)
+    return MarianMTEngine(config.mt, model_manager)
 
 
 def _create_ui_renderer(config: AppConfig) -> UIRenderer:
@@ -175,11 +176,16 @@ async def _async_main(config: AppConfig) -> None:
         mt_target=config.mt.target_language,
     )
 
+    # --- Initialize GPU Model Manager ---
+    from translator.infrastructure.gpu.gpu_model_manager import GPUModelManager
+    
+    model_manager = GPUModelManager(max_vram_mb=config.gpu.max_vram_mb)
+
     # --- Dependency Injection: Create concrete implementations ---
     audio_source = _create_audio_source(config)
-    vad_engine = _create_vad_engine(config)
-    asr_engine = _create_asr_engine(config)
-    mt_engine = _create_mt_engine(config)
+    vad_engine = _create_vad_engine(config, model_manager)
+    asr_engine = _create_asr_engine(config, model_manager)
+    mt_engine = _create_mt_engine(config, model_manager)
     ui_renderer = _create_ui_renderer(config)
 
     logger.info(
@@ -210,6 +216,25 @@ async def _async_main(config: AppConfig) -> None:
     hotkeys.register("quit", lambda: asyncio.ensure_future(pipeline.stop()))
     hotkeys.start()
 
+    # --- Setup system tray ---
+    from translator.ui.tray import SystemTray
+    import threading
+
+    def _on_quit():
+        # Schedule pipeline stop from another thread safely
+        asyncio.run_coroutine_threadsafe(pipeline.stop(), loop)
+
+    def _on_settings():
+        if type(ui_renderer).__name__ == "TkinterOverlayRenderer":
+            asyncio.run_coroutine_threadsafe(ui_renderer.open_settings(), loop)
+
+    def _on_pause():
+        logger.info("tray_action_toggle_pause")
+
+    tray = SystemTray(on_quit=_on_quit, on_settings=_on_settings, on_pause=_on_pause)
+    tray_thread = threading.Thread(target=tray.start, daemon=True, name="system-tray")
+    tray_thread.start()
+
     # --- Setup signal handlers for graceful shutdown ---
     def _signal_handler() -> None:
         logger.info("signal_received", signal="SIGINT/SIGTERM")
@@ -227,6 +252,7 @@ async def _async_main(config: AppConfig) -> None:
         logger.info("keyboard_interrupt")
     finally:
         await pipeline.stop()
+        tray.stop()
         hotkeys.stop()
         logger.info("app_stopped")
 

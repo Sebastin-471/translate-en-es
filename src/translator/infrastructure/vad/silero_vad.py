@@ -12,15 +12,14 @@ from __future__ import annotations
 
 import struct
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from translator.core.events import AudioChunk, VADSegment
+from translator.core.model_manager import DeviceType, ModelManager
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from translator.core.config import VADConfig
 
 logger = structlog.get_logger(__name__)
@@ -36,8 +35,10 @@ class SileroVADEngine:
     This class satisfies the VADEngine Protocol (structural subtyping).
     """
 
-    def __init__(self, config: VADConfig, sample_rate: int = 16_000) -> None:
+    def __init__(self, config: VADConfig, model_manager: ModelManager, sample_rate: int = 16_000) -> None:
         self._config = config
+        self._model_manager = model_manager
+        self._model_name = "silero_vad"
         self._sample_rate = sample_rate
         self._model: Any = None
 
@@ -120,13 +121,21 @@ class SileroVADEngine:
         """Load the Silero VAD model."""
         try:
             from silero_vad import load_silero_vad  # type: ignore[import-untyped]
-
-            self._model = load_silero_vad()
-            logger.info("vad_model_loaded", model="silero-vad-v6")
         except ImportError as e:
             raise ImportError(
                 "silero-vad is required. Install with: pip install silero-vad torch"
             ) from e
+
+        # VAD uses negligible VRAM (~10MB)
+        await self._model_manager.register_model(self._model_name, "vad", 10)
+
+        def _loader() -> Any:
+            return load_silero_vad()
+
+        self._model = await self._model_manager.load_model(
+            self._model_name, _loader, DeviceType.CPU
+        )
+        logger.info("vad_model_loaded", model="silero-vad-v6")
 
     def _run_vad(self, samples: list[float]) -> float:
         """Run VAD inference on a list of float samples."""

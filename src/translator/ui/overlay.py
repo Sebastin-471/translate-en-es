@@ -98,6 +98,18 @@ class TkinterOverlayRenderer:
             logger.warning("overlay_start_timeout")
         else:
             logger.info("overlay_started", position=self._config.position)
+            # Inject a startup message for visual feedback
+            welcome_msg = TranslationResult(
+                original_text="[System: Translator started. Listening for English audio...]",
+                translated_text="[Sistema: Traductor iniciado. Escuchando audio en inglés...]",
+                source_language="en",
+                target_language="es",
+                segment_start_ms=0.0,
+                segment_end_ms=0.0,
+                processing_time_ms=0.0,
+                sequence_id="system-startup",
+            )
+            await self.show(welcome_msg)
 
     async def stop(self) -> None:
         """Signal the Tkinter thread to quit."""
@@ -176,6 +188,8 @@ class TkinterOverlayRenderer:
                     self._add_subtitle(data)
                 elif cmd == "clear":
                     self._clear_subtitles()
+                elif cmd == "open_settings":
+                    self._show_settings()
                 elif cmd == "quit":
                     self._root.quit()
                     return
@@ -265,3 +279,22 @@ class TkinterOverlayRenderer:
         for line in self._lines:
             self._remove_line(line)
         self._lines.clear()
+
+    async def open_settings(self) -> None:
+        """Queue a command to open the settings window."""
+        self._command_queue.put(("open_settings", None))
+
+    def _show_settings(self) -> None:
+        """Open the CustomTkinter settings window."""
+        if self._root is None:
+            return
+            
+        from translator.ui.settings import SettingsWindow
+        
+        def on_save(new_config):
+            # In a real app we'd save to disk and restart pipeline.
+            # For now, we just log it.
+            logger.info("settings_saved", new_config=new_config)
+            
+        SettingsWindow(self._root, self._config, on_save)
+
