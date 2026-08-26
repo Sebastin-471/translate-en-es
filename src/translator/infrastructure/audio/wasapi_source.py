@@ -11,10 +11,16 @@ Requirements:
 from __future__ import annotations
 
 import asyncio
+import math
 import struct
+import time
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from translator.core.events import AudioChunk
+
+logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from translator.core.config import AudioConfig
@@ -36,6 +42,8 @@ class WASAPIAudioSource:
         self._device_info: dict[str, Any] | None = None
         self._buffer: bytes = b""
         self._elapsed_ms: float = 0.0
+        self._last_rms_log: float = 0.0
+        self._chunk_count: int = 0
 
     async def start(self) -> None:
         """Open the WASAPI loopback stream."""
@@ -60,6 +68,14 @@ class WASAPIAudioSource:
         device_rate = int(self._device_info["defaultSampleRate"])
         device_channels = int(self._device_info["maxInputChannels"])
 
+        logger.info(
+            "wasapi_device_selected",
+            device_name=self._device_info.get("name", "unknown"),
+            device_index=self._device_info.get("index", -1),
+            sample_rate=device_rate,
+            channels=device_channels,
+        )
+
         self._stream = self._pa.open(
             format=pyaudio.paInt16,
             channels=device_channels,
@@ -71,9 +87,15 @@ class WASAPIAudioSource:
         )
         self._stream.start_stream()
         self._elapsed_ms = 0.0
+        self._last_rms_log = time.monotonic()
+        self._chunk_count = 0
 
     async def read_chunk(self) -> AudioChunk:
-        """Read the next audio chunk from the WASAPI loopback stream."""
+        """Read the next audio chunk from the WASAPI loopback stream.
+
+        If the device is disconnected, attempts automatic reconnection
+        with backoff. Returns silence during reconnection.
+        """
         if self._stream is None or self._device_info is None:
             raise RuntimeError("WASAPIAudioSource not started — call start() first")
 
@@ -81,12 +103,16 @@ class WASAPIAudioSource:
         device_channels = int(self._device_info["maxInputChannels"])
         frames_to_read = int(device_rate * self._config.chunk_duration_ms / 1000)
 
-        # Read from WASAPI in a thread to avoid blocking the event loop
-        loop = asyncio.get_running_loop()
-        raw_data: bytes = await loop.run_in_executor(
-            None,
-            lambda: self._stream.read(frames_to_read, exception_on_overflow=False),
-        )
+        try:
+            # Read from WASAPI in a thread to avoid blocking the event loop
+            loop = asyncio.get_running_loop()
+            raw_data: bytes = await loop.run_in_executor(
+                None,
+                lambda: self._stream.read(frames_to_read, exception_on_overflow=False),
+            )
+        except OSError as e:
+            logger.warning("audio_device_error", error=str(e))
+            return await self._handle_device_error()
 
         # Convert to mono if multi-channel
         mono_data = self._to_mono(raw_data, device_channels)
@@ -97,12 +123,84 @@ class WASAPIAudioSource:
 
         duration_ms = self._config.chunk_duration_ms
         self._elapsed_ms += duration_ms
+        self._chunk_count += 1
+
+        # Periodic RMS logging (every 5 seconds)
+        now = time.monotonic()
+        if now - self._last_rms_log >= 5.0:
+            rms = self._compute_rms(mono_data)
+            logger.info(
+                "audio_rms_level",
+                rms=round(rms, 4),
+                rms_db=round(20 * math.log10(max(rms, 1e-10)), 1),
+                chunks_captured=self._chunk_count,
+                elapsed_s=round(self._elapsed_ms / 1000, 1),
+            )
+            self._last_rms_log = now
 
         return AudioChunk(
             data=mono_data,
             sample_rate=self._config.sample_rate,
             channels=1,
             duration_ms=float(duration_ms),
+        )
+
+    async def _handle_device_error(self) -> AudioChunk:
+        """Attempt to reconnect after a device error.
+
+        Tries up to 3 times with increasing backoff (2s, 4s, 8s).
+        Returns a silent AudioChunk so the pipeline doesn't stall.
+        """
+        max_retries = 3
+
+        for attempt in range(1, max_retries + 1):
+            backoff = 2 ** attempt
+            logger.info(
+                "audio_reconnecting",
+                attempt=attempt,
+                max_retries=max_retries,
+                backoff_s=backoff,
+            )
+            await asyncio.sleep(backoff)
+
+            try:
+                # Close old stream safely
+                if self._stream is not None:
+                    try:
+                        self._stream.stop_stream()
+                        self._stream.close()
+                    except Exception:
+                        pass
+                    self._stream = None
+
+                if self._pa is not None:
+                    try:
+                        self._pa.terminate()
+                    except Exception:
+                        pass
+                    self._pa = None
+
+                # Re-initialize
+                await self.start()
+                logger.info("audio_reconnected", device=self._device_info.get("name", "unknown") if self._device_info else "unknown")
+                # Return a silent chunk for this cycle
+                return self._silent_chunk()
+
+            except Exception as e:
+                logger.warning("audio_reconnect_failed", attempt=attempt, error=str(e))
+
+        logger.error("audio_reconnect_exhausted", max_retries=max_retries)
+        return self._silent_chunk()
+
+    def _silent_chunk(self) -> AudioChunk:
+        """Return a chunk of silence (used during reconnection)."""
+        n_samples = int(self._config.sample_rate * self._config.chunk_duration_ms / 1000)
+        silent_data = b"\x00\x00" * n_samples
+        return AudioChunk(
+            data=silent_data,
+            sample_rate=self._config.sample_rate,
+            channels=1,
+            duration_ms=float(self._config.chunk_duration_ms),
         )
 
     async def stop(self) -> None:
@@ -155,6 +253,16 @@ class WASAPIAudioSource:
                 return dict(dev)
 
         return None
+
+    @staticmethod
+    def _compute_rms(data: bytes) -> float:
+        """Compute the RMS amplitude of 16-bit PCM audio (0.0 to 1.0 scale)."""
+        n_samples = len(data) // 2
+        if n_samples == 0:
+            return 0.0
+        samples = struct.unpack(f"<{n_samples}h", data)
+        sum_sq = sum(s * s for s in samples)
+        return math.sqrt(sum_sq / n_samples) / 32768.0
 
     @staticmethod
     def _to_mono(data: bytes, n_channels: int) -> bytes:

@@ -212,7 +212,7 @@ async def _async_main(config: AppConfig) -> None:
     from translator.ui.hotkeys import HotkeyManager
 
     hotkeys = HotkeyManager(config.hotkeys, loop=loop)
-    hotkeys.register("toggle_pause", lambda: logger.info("hotkey_toggle_pause"))
+    hotkeys.register("toggle_pause", lambda: asyncio.ensure_future(pipeline.toggle_pause()))
     hotkeys.register("quit", lambda: asyncio.ensure_future(pipeline.stop()))
     hotkeys.start()
 
@@ -229,7 +229,7 @@ async def _async_main(config: AppConfig) -> None:
             asyncio.run_coroutine_threadsafe(ui_renderer.open_settings(), loop)
 
     def _on_pause():
-        logger.info("tray_action_toggle_pause")
+        asyncio.run_coroutine_threadsafe(pipeline.toggle_pause(), loop)
 
     tray = SystemTray(on_quit=_on_quit, on_settings=_on_settings, on_pause=_on_pause)
     tray_thread = threading.Thread(target=tray.start, daemon=True, name="system-tray")

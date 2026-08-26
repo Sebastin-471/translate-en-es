@@ -50,6 +50,10 @@ class SileroVADEngine:
         self._total_speech_ms: float = 0.0
         self._elapsed_ms: float = 0.0
         self._last_confidence: float = 0.0
+        self._last_vad_log: float = 0.0
+        self._confidence_sum: float = 0.0
+        self._confidence_count: int = 0
+        self._speech_detections: int = 0
 
     async def process_chunk(self, chunk: AudioChunk) -> VADSegment | None:
         """Process an AudioChunk and return a VADSegment if speech ended."""
@@ -61,8 +65,31 @@ class SileroVADEngine:
         confidence = self._run_vad(samples)
         self._last_confidence = confidence
         self._elapsed_ms += chunk.duration_ms
+        self._confidence_sum += confidence
+        self._confidence_count += 1
 
         is_speech = confidence >= self._config.threshold
+        if is_speech:
+            self._speech_detections += 1
+
+        # Periodic VAD stats logging (every 5 seconds)
+        now = time.monotonic()
+        if self._last_vad_log == 0.0:
+            self._last_vad_log = now
+        if now - self._last_vad_log >= 5.0:
+            avg_conf = self._confidence_sum / max(self._confidence_count, 1)
+            logger.info(
+                "vad_stats",
+                avg_confidence=round(avg_conf, 4),
+                last_confidence=round(confidence, 4),
+                speech_detections=self._speech_detections,
+                total_chunks=self._confidence_count,
+                threshold=self._config.threshold,
+            )
+            self._confidence_sum = 0.0
+            self._confidence_count = 0
+            self._speech_detections = 0
+            self._last_vad_log = now
 
         if is_speech:
             if not self._is_speaking:

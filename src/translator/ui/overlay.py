@@ -165,6 +165,14 @@ class TkinterOverlayRenderer:
                 self._frame = tk.Frame(root, bg="black")
             self._frame.pack(fill=tk.BOTH, expand=True, anchor=tk.S)
 
+            # Drag-to-move support
+            self._drag_start_x = 0
+            self._drag_start_y = 0
+            root.bind("<Button-1>", self._on_drag_start)
+            root.bind("<B1-Motion>", self._on_drag_motion)
+            self._frame.bind("<Button-1>", self._on_drag_start)
+            self._frame.bind("<B1-Motion>", self._on_drag_motion)
+
             # Start polling the command queue
             self._poll_commands()
 
@@ -298,3 +306,17 @@ class TkinterOverlayRenderer:
             
         SettingsWindow(self._root, self._config, on_save)
 
+    # --- Drag-to-move handlers ---
+
+    def _on_drag_start(self, event: tk.Event) -> None:
+        """Record the starting position of a drag."""
+        self._drag_start_x = event.x
+        self._drag_start_y = event.y
+
+    def _on_drag_motion(self, event: tk.Event) -> None:
+        """Move the overlay window as the user drags."""
+        if self._root is None:
+            return
+        x = self._root.winfo_x() + (event.x - self._drag_start_x)
+        y = self._root.winfo_y() + (event.y - self._drag_start_y)
+        self._root.geometry(f"+{x}+{y}")

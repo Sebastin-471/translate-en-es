@@ -91,6 +91,8 @@ class PipelineOrchestrator:
         # Task references for lifecycle management
         self._tasks: list[asyncio.Task[None]] = []
         self._running = False
+        self._paused = asyncio.Event()
+        self._paused.set()  # Start in un-paused state (event is "set" = running)
 
     async def start(self) -> None:
         """Start all pipeline stages and the audio capture loop."""
@@ -209,6 +211,32 @@ class PipelineOrchestrator:
         """Access the pipeline metrics collector."""
         return self._metrics
 
+    @property
+    def is_paused(self) -> bool:
+        """Return True if the pipeline is currently paused."""
+        return not self._paused.is_set()
+
+    async def pause(self) -> None:
+        """Pause the audio capture loop. Stages stay alive but starve."""
+        if not self._paused.is_set():
+            return  # Already paused
+        self._paused.clear()
+        logger.info("pipeline_paused")
+
+    async def resume(self) -> None:
+        """Resume the audio capture loop."""
+        if self._paused.is_set():
+            return  # Already running
+        self._paused.set()
+        logger.info("pipeline_resumed")
+
+    async def toggle_pause(self) -> None:
+        """Toggle between paused and running states."""
+        if self.is_paused:
+            await self.resume()
+        else:
+            await self.pause()
+
     # --- Internal processing methods ---
 
     async def _audio_capture_loop(self) -> None:
@@ -216,6 +244,9 @@ class PipelineOrchestrator:
         logger.info("audio_capture_started")
         try:
             while self._running:
+                # Wait if paused
+                await self._paused.wait()
+
                 try:
                     chunk = await self._audio_source.read_chunk()
                     await self._audio_queue.put(chunk)
