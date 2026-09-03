@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import tkinter as tk
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
 
 import customtkinter as ctk
 
 from translator.core.config import AppConfig
-
-if TYPE_CHECKING:
-    pass
 
 
 class SettingsWindow(ctk.CTkToplevel):
@@ -20,7 +17,7 @@ class SettingsWindow(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Translator Settings")
         self.geometry("500x600")
-        
+
         # Make the window modal and always on top
         self.transient(parent)
         self.grab_set()
@@ -43,11 +40,11 @@ class SettingsWindow(ctk.CTkToplevel):
 
         # --- Audio Settings ---
         self._add_section_header("Audio Source", 0)
-        
+
         ctk.CTkLabel(self.scrollable_frame, text="Device:").grid(row=1, column=0, sticky="w", pady=(10, 0))
         self.device_var = ctk.StringVar(value="Default System Audio (Loopback)")
         self.device_menu = ctk.CTkOptionMenu(
-            self.scrollable_frame, 
+            self.scrollable_frame,
             variable=self.device_var,
             values=["Default System Audio (Loopback)", "Microphone (Coming Soon)"]
         )
@@ -80,9 +77,9 @@ class SettingsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(self.scrollable_frame, text="Font Size:").grid(row=6, column=0, sticky="w", pady=(10, 0))
         self.font_size_var = ctk.IntVar(value=self._config.ui.font_size)
         self.font_slider = ctk.CTkSlider(
-            self.scrollable_frame, 
-            from_=12, 
-            to=48, 
+            self.scrollable_frame,
+            from_=12,
+            to=48,
             number_of_steps=36,
             variable=self.font_size_var
         )
@@ -109,8 +106,8 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _add_section_header(self, text: str, row: int) -> None:
         header = ctk.CTkLabel(
-            self.scrollable_frame, 
-            text=text, 
+            self.scrollable_frame,
+            text=text,
             font=ctk.CTkFont(size=16, weight="bold")
         )
         header.grid(row=row, column=0, columnspan=2, sticky="w", pady=(20, 5))

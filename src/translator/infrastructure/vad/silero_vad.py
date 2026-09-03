@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import struct
 import time
+import uuid
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -45,6 +46,7 @@ class SileroVADEngine:
         # State for accumulating speech
         self._is_speaking = False
         self._speech_buffer: list[bytes] = []
+        self._ring_buffer: list[bytes] = []
         self._speech_start_ms: float = 0.0
         self._silence_duration_ms: float = 0.0
         self._total_speech_ms: float = 0.0
@@ -54,11 +56,20 @@ class SileroVADEngine:
         self._confidence_sum: float = 0.0
         self._confidence_count: int = 0
         self._speech_detections: int = 0
+        self._current_sequence_id: str = ""
+        self._last_partial_ms: float = 0.0
 
     async def process_chunk(self, chunk: AudioChunk) -> VADSegment | None:
         """Process an AudioChunk and return a VADSegment if speech ended."""
         if self._model is None:
             await self._load_model()
+
+        # Maintain a ring buffer for pre-speech padding
+        if not self._is_speaking:
+            self._ring_buffer.append(chunk.data)
+            max_ring_chunks = max(1, self._config.speech_pad_ms // chunk.duration_ms)
+            if len(self._ring_buffer) > max_ring_chunks:
+                self._ring_buffer.pop(0)
 
         # Convert PCM bytes to float tensor for Silero
         samples = self._pcm_to_float(chunk.data)
@@ -95,10 +106,13 @@ class SileroVADEngine:
             if not self._is_speaking:
                 # Speech onset
                 self._is_speaking = True
-                self._speech_start_ms = self._elapsed_ms - chunk.duration_ms
-                self._speech_buffer = []
-                self._total_speech_ms = 0.0
+                self._speech_start_ms = self._elapsed_ms - chunk.duration_ms - (len(self._ring_buffer) * chunk.duration_ms)
+                self._speech_buffer = self._ring_buffer.copy()
+                self._ring_buffer = []
+                self._total_speech_ms = len(self._speech_buffer) * chunk.duration_ms
                 self._silence_duration_ms = 0.0
+                self._current_sequence_id = uuid.uuid4().hex[:12]
+                self._last_partial_ms = 0.0
                 logger.debug(
                     "vad_speech_start",
                     start_ms=self._speech_start_ms,
@@ -111,7 +125,12 @@ class SileroVADEngine:
 
             # Force split if segment is too long
             if self._total_speech_ms >= self._config.max_segment_duration_ms:
-                return self._emit_segment()
+                return self._emit_segment(is_partial=False)
+
+            # Emit partial segment if interval reached
+            elif self._total_speech_ms - self._last_partial_ms >= getattr(self._config, "partial_interval_ms", 500):
+                self._last_partial_ms = self._total_speech_ms
+                return self._emit_segment(is_partial=True)
 
         else:
             if self._is_speaking:
@@ -124,7 +143,7 @@ class SileroVADEngine:
                     # Speech ended — check minimum duration
                     speech_only_ms = self._total_speech_ms - self._silence_duration_ms
                     if speech_only_ms >= self._config.min_speech_duration_ms:
-                        return self._emit_segment()
+                        return self._emit_segment(is_partial=False)
                     else:
                         # Too short — discard
                         logger.debug(
@@ -172,7 +191,7 @@ class SileroVADEngine:
         confidence: float = self._model(tensor, self._sample_rate).item()
         return confidence
 
-    def _emit_segment(self) -> VADSegment:
+    def _emit_segment(self, is_partial: bool = False) -> VADSegment:
         """Create a VADSegment from accumulated speech buffer."""
         audio_data = b"".join(self._speech_buffer)
         segment = VADSegment(
@@ -182,6 +201,8 @@ class SileroVADEngine:
             end_time_ms=self._elapsed_ms,
             duration_ms=self._total_speech_ms,
             confidence=self._last_confidence,
+            is_partial=is_partial,
+            sequence_id=self._current_sequence_id or uuid.uuid4().hex[:12],
         )
 
         logger.info(
@@ -190,19 +211,24 @@ class SileroVADEngine:
             end_ms=segment.end_time_ms,
             duration_ms=segment.duration_ms,
             confidence=segment.confidence,
+            is_partial=segment.is_partial,
             sequence_id=segment.sequence_id,
         )
 
-        self._reset_state()
+        if not is_partial:
+            self._reset_state()
         return segment
 
     def _reset_state(self) -> None:
         """Reset accumulation state without resetting the model."""
         self._is_speaking = False
         self._speech_buffer = []
+        self._ring_buffer = []
         self._speech_start_ms = 0.0
         self._silence_duration_ms = 0.0
         self._total_speech_ms = 0.0
+        self._current_sequence_id = ""
+        self._last_partial_ms = 0.0
 
     @staticmethod
     def _pcm_to_float(data: bytes) -> list[float]:

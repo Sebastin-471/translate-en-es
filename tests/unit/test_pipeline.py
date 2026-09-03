@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from translator.core.config import AppConfig, AudioConfig, PipelineConfig, LoggingConfig
+from translator.core.config import AppConfig, AudioConfig, LoggingConfig, PipelineConfig
 from translator.core.events import TranslationResult
 from translator.infrastructure.mock.mock_asr import MockASREngine
 from translator.infrastructure.mock.mock_audio import MockAudioSource

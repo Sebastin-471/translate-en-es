@@ -7,12 +7,8 @@ VADSegment, simulating speech detection without a real model.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
 
 from translator.core.events import AudioChunk, VADSegment
-
-if TYPE_CHECKING:
-    pass
 
 
 class MockVADEngine:

@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+Esta actualización introduce mejoras arquitectónicas significativas, un nuevo sistema de registro de plugins, mejoras en la GUI y correcciones de bugs críticos para asegurar el manejo robusto del audio.
+
+### ✨ Nuevas Características
+
+- **Configuración Multi-Entorno**: Soporte para configuraciones por entorno (`development.yaml`, `production.yaml`, etc.) cargadas automáticamente sobre `base.yaml`.
+- **Engine Plugin Registry**: Nuevo sistema dinámico `EngineRegistry` (`plugins.py`) que reemplaza dependencias hardcodeadas, permitiendo inyectar motores, mocks y fuentes de audio de forma extensible.
+- **Gestión Avanzada de Dispositivos de Audio**: Nuevos `AudioDeviceManager` y `DeviceManagerFactory` para enumerar y detectar dispositivos del sistema (WASAPI/PipeWire) con soporte cross-platform.
+- **Hot-Reload de Configuración**: Recarga de parámetros de UI y Pipeline en caliente sin reiniciar la aplicación.
+
+### 🔧 Mejoras
+
+- **Refactorización de Mock Engines**: Las factories mock ahora reciben configuraciones especializadas (`VADConfig`, `ASRConfig`, etc.) en vez del `AppConfig` completo, asegurando ejecución desacoplada en modo mock.
+- **Diagrama de Arquitectura Actualizado**: Grafo Mermaid en `plans/architecture.md` actualizado para reflejar los nuevos componentes (`EngineRegistry`, config multi-entorno, `AudioDeviceManager`).
+- **Seguridad en `.gitignore`**: Se ignoran explícitamente archivos `.env` y `.env.local` para prevenir fugas accidentales de credenciales.
+
+### 🐛 Corrección de Errores
+
+- **Fix GPU Manager (`total_mem` → `total_memory`)**: Corregido `AttributeError` crítico en `GPUModelManager` donde se usaba `props.total_mem` en vez de la API correcta `props.total_memory` de PyTorch, causando crash en sistemas con CUDA habilitado.
+- **Fix Dataclass Config (`.get()`)**: Corregido crash al iniciar con hot-reload donde se llamaba `.get()` en un dataclass (`ConfigConfig`) en vez de acceder al atributo directamente.
+- **Fix Dispositivo de Audio Loopback**: Cambiado `config.yaml` para escuchar `"Speakers"` en vez de cadena vacía, evitando que la app se conecte a loopbacks virtuales (como SteelSeries Sonar) por defecto.
+
+---
 ## [1.0.0] - 2026-08-17
 
 ¡Bienvenido a la primera versión funcional de **Live Translator**! En esta actualización hemos conectado el motor real de Inteligencia Artificial y hemos construido una interfaz gráfica completa para que puedas usarlo sin tocar código.

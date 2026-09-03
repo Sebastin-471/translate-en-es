@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import time
-
 from translator.core.events import (
     AudioChunk,
     PipelineShutdown,

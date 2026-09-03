@@ -235,7 +235,7 @@ class WASAPIAudioSource:
             if default_loopback_idx is not None and default_loopback_idx >= 0:
                 dev = pa.get_device_info_by_index(default_loopback_idx)
                 return dict(dev)
-            
+
             # Fallback: get name of default output device and search for its loopback
             default_out_idx = wasapi_info.get("defaultOutputDevice", -1)
             if default_out_idx is not None and default_out_idx >= 0:

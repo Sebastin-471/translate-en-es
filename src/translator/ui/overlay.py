@@ -12,13 +12,12 @@ pipeline happens via a thread-safe queue and `root.after()` polling.
 
 from __future__ import annotations
 
-import asyncio
 import queue
 import sys
 import threading
 import time
 import tkinter as tk
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import structlog
@@ -41,6 +40,8 @@ class _SubtitleLine:
     original: str
     translated: str
     created_at: float
+    sequence_id: str
+    is_partial: bool
     label_translated: tk.Label | None = None
     label_original: tk.Label | None = None
 
@@ -210,9 +211,39 @@ class TkinterOverlayRenderer:
         # Schedule next poll (50ms ≈ 20fps)
         self._root.after(50, self._poll_commands)
 
+    def _truncate_text(self, text: str, max_words: int = 25) -> str:
+        """Truncate text to keep only the last max_words to prevent UI overflow."""
+        words = text.split()
+        if len(words) <= max_words:
+            return text
+        return "... " + " ".join(words[-max_words:])
+
     def _add_subtitle(self, translation: TranslationResult) -> None:
         """Add a new subtitle line to the overlay."""
         if self._frame is None or self._root is None:
+            return
+
+        # Check if we already have a line for this sequence_id
+        existing_line = next(
+            (line for line in self._lines if line.sequence_id == translation.sequence_id), None
+        )
+
+        display_translated = self._truncate_text(translation.translated_text)
+        display_original = self._truncate_text(translation.original_text)
+
+        if existing_line:
+            # Update existing line
+            existing_line.original = translation.original_text
+            existing_line.translated = translation.translated_text
+            existing_line.created_at = time.monotonic()
+            existing_line.is_partial = translation.is_partial
+
+            if existing_line.label_translated:
+                existing_line.label_translated.config(text=display_translated)
+
+            if existing_line.label_original and self._config.show_original:
+                existing_line.label_original.config(text=display_original)
+
             return
 
         bg_color = self._config.background_color
@@ -224,12 +255,14 @@ class TkinterOverlayRenderer:
             original=translation.original_text,
             translated=translation.translated_text,
             created_at=time.monotonic(),
+            sequence_id=translation.sequence_id,
+            is_partial=translation.is_partial,
         )
 
         # Create translated text label
         line.label_translated = tk.Label(
             self._frame,
-            text=translation.translated_text,
+            text=display_translated,
             fg=self._config.text_color,
             bg=bg_color,
             font=(self._config.font_family, self._config.font_size, "bold"),
@@ -245,7 +278,7 @@ class TkinterOverlayRenderer:
             smaller_size = max(10, self._config.font_size - 4)
             line.label_original = tk.Label(
                 self._frame,
-                text=translation.original_text,
+                text=display_original,
                 fg="#AAAAAA",
                 bg=bg_color,
                 font=(self._config.font_family, smaller_size, "italic"),
@@ -296,14 +329,14 @@ class TkinterOverlayRenderer:
         """Open the CustomTkinter settings window."""
         if self._root is None:
             return
-            
+
         from translator.ui.settings import SettingsWindow
-        
+
         def on_save(new_config):
             # In a real app we'd save to disk and restart pipeline.
             # For now, we just log it.
             logger.info("settings_saved", new_config=new_config)
-            
+
         SettingsWindow(self._root, self._config, on_save)
 
     # --- Drag-to-move handlers ---

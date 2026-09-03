@@ -194,7 +194,7 @@ class PipelineOrchestrator:
                 asyncio.gather(*self._tasks, return_exceptions=True),
                 timeout=10.0,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("pipeline_shutdown_timeout", timeout_s=10)
             for task in self._tasks:
                 if not task.done():

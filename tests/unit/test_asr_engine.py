@@ -94,7 +94,7 @@ class TestMockASREngine:
     @pytest.mark.asyncio
     async def test_measures_processing_time(self) -> None:
         """Transcript should report processing_time_ms > 0."""
-        asr = MockASREngine(delay_ms=10)
+        asr = MockASREngine(delay_ms=50)
 
         segment = VADSegment(
             audio_data=b"\x00" * 32000,
@@ -106,4 +106,4 @@ class TestMockASREngine:
         )
 
         result = await asr.transcribe(segment)
-        assert result.processing_time_ms >= 5  # At least some of the delay
+        assert result.processing_time_ms >= 25  # At least half of the delay

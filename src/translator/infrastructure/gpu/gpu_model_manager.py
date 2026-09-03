@@ -8,7 +8,7 @@ when available, with graceful fallback for CPU-only environments.
 from __future__ import annotations
 
 import time
-from typing import Any, Callable
+from typing import Any
 
 import structlog
 
@@ -168,9 +168,9 @@ class GPUModelManager:
 
             if torch.cuda.is_available():
                 props = torch.cuda.get_device_properties(self._device_index)
-                total_mb = props.total_mem / (1024 * 1024)
+                total_mb = props.total_memory / (1024 * 1024)
                 free_mb = (
-                    torch.cuda.get_device_properties(self._device_index).total_mem
+                    torch.cuda.get_device_properties(self._device_index).total_memory
                     - torch.cuda.memory_allocated(self._device_index)
                 ) / (1024 * 1024)
         except (ImportError, RuntimeError):

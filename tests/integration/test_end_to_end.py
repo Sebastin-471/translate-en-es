@@ -161,7 +161,7 @@ class TestEndToEnd:
         # Stop should complete within the timeout
         try:
             await asyncio.wait_for(pipeline.stop(), timeout=15.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail("Pipeline shutdown timed out after 15 seconds")
 
     @pytest.mark.asyncio

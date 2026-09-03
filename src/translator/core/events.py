@@ -83,6 +83,7 @@ class VADSegment:
     end_time_ms: float
     duration_ms: float
     confidence: float
+    is_partial: bool = False
     sequence_id: str = field(default_factory=_new_sequence_id)
     created_at_ns: int = field(default_factory=_monotonic_ns)
 
@@ -113,6 +114,7 @@ class TranscriptResult:
     segment_start_ms: float
     segment_end_ms: float
     processing_time_ms: float
+    is_partial: bool = False
     sequence_id: str = field(default_factory=_new_sequence_id)
     created_at_ns: int = field(default_factory=_monotonic_ns)
 
@@ -145,6 +147,7 @@ class TranslationResult:
     segment_start_ms: float
     segment_end_ms: float
     processing_time_ms: float
+    is_partial: bool = False
     sequence_id: str = field(default_factory=_new_sequence_id)
     created_at_ns: int = field(default_factory=_monotonic_ns)
 

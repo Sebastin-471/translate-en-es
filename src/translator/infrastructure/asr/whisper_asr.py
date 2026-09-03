@@ -10,10 +10,8 @@ Requirements:
 
 from __future__ import annotations
 
-import io
-import struct
+import asyncio
 import time
-import wave
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -55,11 +53,13 @@ class WhisperASREngine:
         audio_array = self._pcm_to_numpy(segment.audio_data, segment.sample_rate)
 
         # Run transcription
-        segments_iter, info = self._model.transcribe(
+        segments_iter, info = await asyncio.to_thread(
+            self._model.transcribe,
             audio_array,
             language=self._config.language,
             beam_size=self._config.beam_size,
             vad_filter=False,  # We already ran VAD
+            condition_on_previous_text=False,  # Prevents hallucinations on VAD-chunked audio
         )
 
         # Collect all segment texts
@@ -77,6 +77,7 @@ class WhisperASREngine:
             segment_start_ms=segment.start_time_ms,
             segment_end_ms=segment.end_time_ms,
             processing_time_ms=elapsed_ms,
+            is_partial=segment.is_partial,
             sequence_id=segment.sequence_id,
         )
 
@@ -105,7 +106,7 @@ class WhisperASREngine:
         device_str = self._resolve_device()
         dev_type = DeviceType.CUDA if device_str == "cuda" else DeviceType.CPU
         model_path = self._config.model_path or self._config.model_size
-        
+
         # Estimate VRAM
         vram_estimate = 1500 if "large" in model_path else (500 if "small" in model_path else 200)
 

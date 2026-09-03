@@ -1,0 +1,104 @@
+# =============================================================================
+# translate-en-es — Base Configuration
+# =============================================================================
+# This file contains shared defaults. Environment-specific configs
+# (development.yaml, production.yaml) extend and override these values.
+# All parameters can be overridden via environment variables with the prefix
+# TRANSLATOR_ (e.g., TRANSLATOR_ASR__MODEL_SIZE=medium).
+# Nested keys use double underscores: TRANSLATOR_ASR__DEVICE=cpu
+
+# ---------------------------------------------------------------------------
+# Audio capture
+# ---------------------------------------------------------------------------
+audio:
+  backend: "wasapi"          # "wasapi" (Windows), "pipewire" (Linux), "file" (testing)
+  sample_rate: 16000         # Must be 16000 for Silero VAD / Whisper compatibility
+  chunk_duration_ms: 32      # Audio chunk duration sent to VAD (Silero requires >= 512 samples = 32ms at 16kHz)
+  channels: 1                # 1 = mono (required by pipeline)
+  file_path: ""              # Only used when backend = "file"
+  device_name: ""            # Loopback device name regex (empty = default system output device)
+
+# ---------------------------------------------------------------------------
+# Voice Activity Detection (VAD)
+# ---------------------------------------------------------------------------
+vad:
+  threshold: 0.5                    # Probability threshold for speech detection
+  min_speech_duration_ms: 250       # Minimum speech duration to trigger segment
+  min_silence_duration_ms: 300      # Minimum silence duration to split segments
+  speech_pad_ms: 100                # Padding before/after detected speech
+  max_segment_duration_ms: 15000    # Max segment duration (forces split for ASR efficiency)
+  partial_interval_ms: 500          # Interval for emitting partial segments
+
+# ---------------------------------------------------------------------------
+# Automatic Speech Recognition (ASR)
+# ---------------------------------------------------------------------------
+asr:
+  model_size: "large-v3-turbo"      # Model identifier
+  device: "auto"                    # "cuda", "cpu", "auto"
+  compute_type: "int8"              # "int8", "float16", "float32"
+  language: "en"                    # Source language (ISO 639-1)
+  beam_size: 5                      # Beam size for decoding
+  model_path: ""                    # Path to local model (empty = download from HF)
+  cpu_threads: 4                    # CPU threads for CPU inference
+
+# ---------------------------------------------------------------------------
+# Machine Translation (MT)
+# ---------------------------------------------------------------------------
+mt:
+  model_name: "Helsinki-NLP/opus-mt-en-es"  # HF model name for tokenizer
+  model_path: ""                              # Path to CTranslate2-converted model
+  source_language: "en"                       # Source language (ISO 639-1)
+  target_language: "es"                       # Target language (ISO 639-1)
+  device: "auto"                              # "cuda", "cpu", "auto"
+  compute_type: "int8"                        # "int8", "float16", "float32"
+  beam_size: 4                                # Beam size for translation
+
+# ---------------------------------------------------------------------------
+# GPU / Model Manager
+# ---------------------------------------------------------------------------
+gpu:
+  max_vram_mb: 0          # Maximum VRAM budget in MB (0 = no limit)
+  preload_models: true    # Pre-load models at startup vs lazy load
+  device_index: 0         # Device index for multi-GPU systems
+
+# ---------------------------------------------------------------------------
+# UI Overlay
+# ---------------------------------------------------------------------------
+ui:
+  enabled: true               # Enable subtitle overlay at startup
+  position: "bottom"          # "bottom", "top", "center"
+  margin_x: 50                # Horizontal margin from screen edge (px)
+  margin_y: 80                # Vertical margin from screen edge (px)
+  font_family: "Segoe UI"     # Font family (must be installed)
+  font_size: 22               # Font size in points
+  text_color: "#FFFFFF"       # Text color (hex)
+  background_color: "#000000" # Background color (hex)
+  background_opacity: 0.75    # Background opacity (0.0-1.0)
+  max_lines: 3                # Max subtitle lines visible
+  fade_after_seconds: 8.0     # Fade out duration (seconds)
+  show_original: true         # Show original English text above translation
+
+# ---------------------------------------------------------------------------
+# Hotkeys
+# ---------------------------------------------------------------------------
+hotkeys:
+  toggle_overlay: "ctrl+shift+t"
+  toggle_pause: "ctrl+shift+p"
+  quit: "ctrl+shift+q"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  level: "INFO"
+  format: "console"           # "json" (production), "console" (development)
+  file_path: ""               # Log file path (empty = stdout only)
+  log_latencies: true         # Log latency metrics per pipeline stage
+
+# ---------------------------------------------------------------------------
+# Pipeline
+# ---------------------------------------------------------------------------
+pipeline:
+  queue_size: 50              # Queue size between stages (0 = unbounded)
+  mock_mode: false            # Enable mock mode (simulated engines)
+  mock_delay_ms: 100          # Mock delay per stage (ms, only in mock mode)

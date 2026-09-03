@@ -4,14 +4,14 @@ Provides cross-platform global hotkey registration using `pynput`.
 Supports toggle overlay, pause/resume pipeline, and quit.
 
 The hotkey listener runs in a background thread and communicates
-with the async pipeline via callbacks.
+with the async pipeline via a thread-safe asyncio.Queue.
 """
 
 from __future__ import annotations
 
 import asyncio
-import threading
-from typing import Any, Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import structlog
 
@@ -27,8 +27,8 @@ class HotkeyManager:
     registers them as global hotkeys using pynput.
 
     Thread-safe: the pynput listener runs in its own thread, and
-    callbacks are dispatched to the asyncio event loop via
-    `loop.call_soon_threadsafe()`.
+    callbacks are dispatched to the asyncio event loop via a
+    thread-safe asyncio.Queue consumed by a dedicated async task.
     """
 
     def __init__(
@@ -37,19 +37,21 @@ class HotkeyManager:
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         self._config = config
-        self._loop = loop
+        self._loop = loop or asyncio.get_running_loop()
         self._listener: Any = None
-        self._callbacks: dict[str, Callable[[], Any]] = {}
+        self._callbacks: dict[str, Callable[[], Coroutine[Any, Any, None]]] = {}
         self._hotkeys: dict[str, str] = {}
         self._active = False
+        self._queue: asyncio.Queue[Callable[[], Coroutine[Any, Any, None]]] = asyncio.Queue()
+        self._dispatch_task: asyncio.Task[None] | None = None
 
-    def register(self, action: str, callback: Callable[[], Any]) -> None:
+    def register(self, action: str, callback: Callable[[], Coroutine[Any, Any, None]]) -> None:
         """Register a callback for a named action.
 
         Args:
             action: Action name (must match a config field:
                     "toggle_overlay", "toggle_pause", "quit").
-            callback: Callable to invoke when the hotkey is pressed.
+            callback: Async callable to invoke when the hotkey is pressed.
         """
         hotkey_str = getattr(self._config, action, None)
         if hotkey_str is None:
@@ -86,17 +88,25 @@ class HotkeyManager:
         self._listener.start()
         self._active = True
 
+        # Start the dispatch task on the event loop
+        self._dispatch_task = self._loop.create_task(self._dispatch_loop())
+
         logger.info(
             "hotkeys_started",
             hotkeys={a: h for a, h in self._hotkeys.items()},
         )
 
     def stop(self) -> None:
-        """Stop the hotkey listener."""
+        """Stop the hotkey listener and dispatch task."""
         if self._listener is not None:
             self._listener.stop()
             self._listener = None
+
+        # Signal the dispatch loop to stop
         self._active = False
+        if self._dispatch_task:
+            self._dispatch_task.cancel()
+
         logger.info("hotkeys_stopped")
 
     @property
@@ -106,21 +116,32 @@ class HotkeyManager:
 
     # --- Private helpers ---
 
-    def _make_threadsafe_callback(self, callback: Callable[[], Any]) -> Callable[[], None]:
+    def _make_threadsafe_callback(self, callback: Callable[[], Coroutine[Any, Any, None]]) -> Callable[[], None]:
         """Wrap a callback so it runs safely from the pynput thread."""
         def _wrapper() -> None:
-            if self._loop is not None and self._loop.is_running():
-                if asyncio.iscoroutinefunction(callback):
-                    self._loop.call_soon_threadsafe(
-                        lambda: asyncio.ensure_future(callback())
-                    )
-                else:
-                    self._loop.call_soon_threadsafe(callback)
-            else:
-                # Fallback: call directly (may not be thread-safe)
-                callback()
+            # Put the coroutine into the queue (thread-safe)
+            try:
+                self._queue.put_nowait(callback)
+            except asyncio.QueueFull:
+                logger.warning("hotkey_queue_full", callback=callback.__name__)
 
         return _wrapper
+
+    async def _dispatch_loop(self) -> None:
+        """Consume callbacks from the queue and execute them on the event loop."""
+        while self._active:
+            try:
+                callback = await asyncio.wait_for(self._queue.get(), timeout=0.1)
+                try:
+                    await callback()
+                except Exception:
+                    logger.exception("hotkey_callback_error", callback=callback.__name__)
+            except TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("hotkey_dispatch_error")
 
     @staticmethod
     def _to_pynput_format(hotkey: str) -> str:

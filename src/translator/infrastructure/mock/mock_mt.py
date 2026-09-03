@@ -11,7 +11,6 @@ import time
 
 from translator.core.events import TranscriptResult, TranslationResult
 
-
 _SAMPLE_TRANSLATIONS: dict[str, str] = {
     "Hello, how are you today?": "Hola, ¿cómo estás hoy?",
     "The meeting will start in five minutes.": "La reunión comenzará en cinco minutos.",

@@ -25,7 +25,7 @@ audio:
   file_path: ""
 
   # Loopback device name regex (empty = default system output device)
-  device_name: ""
+  device_name: "Speakers"
 
 # ---------------------------------------------------------------------------
 # Voice Activity Detection (VAD)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from translator.core.model_manager import DeviceType, VRAMStatus
+from translator.core.model_manager import DeviceType
 from translator.infrastructure.gpu.gpu_model_manager import GPUModelManager
 
 

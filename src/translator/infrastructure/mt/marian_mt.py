@@ -14,7 +14,8 @@ Requirements:
 
 from __future__ import annotations
 
-import os
+import asyncio
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -64,25 +65,51 @@ class MarianMTEngine:
                 segment_start_ms=transcript.segment_start_ms,
                 segment_end_ms=transcript.segment_end_ms,
                 processing_time_ms=0.0,
+                is_partial=transcript.is_partial,
                 sequence_id=transcript.sequence_id,
             )
 
         start_ns = time.monotonic_ns()
 
+        # Split text into sentences for better MT performance
+        sentences = re.split(r'(?<=[.!?]) +', transcript.text.strip())
+
         # Tokenize input
-        encoded = self._tokenizer.encode(transcript.text)
-        tokens = self._tokenizer.convert_ids_to_tokens(encoded)
+        batch_tokens = []
+        for sentence in sentences:
+            if not sentence.strip():
+                continue
+            encoded = self._tokenizer.encode(sentence)
+            batch_tokens.append(self._tokenizer.convert_ids_to_tokens(encoded))
+
+        if not batch_tokens:
+            return TranslationResult(
+                original_text=transcript.text,
+                translated_text="",
+                source_language=self._config.source_language,
+                target_language=self._config.target_language,
+                segment_start_ms=transcript.segment_start_ms,
+                segment_end_ms=transcript.segment_end_ms,
+                processing_time_ms=0.0,
+                is_partial=transcript.is_partial,
+                sequence_id=transcript.sequence_id,
+            )
 
         # Translate via CTranslate2
-        results = self._translator.translate_batch(
-            [tokens],
+        results = await asyncio.to_thread(
+            self._translator.translate_batch,
+            batch_tokens,
             beam_size=self._config.beam_size,
         )
 
         # Decode output
-        output_tokens = results[0].hypotheses[0]
-        output_ids = self._tokenizer.convert_tokens_to_ids(output_tokens)
-        translated_text = self._tokenizer.decode(output_ids, skip_special_tokens=True)
+        translated_sentences = []
+        for res in results:
+            output_tokens = res.hypotheses[0]
+            output_ids = self._tokenizer.convert_tokens_to_ids(output_tokens)
+            translated_sentences.append(self._tokenizer.decode(output_ids, skip_special_tokens=True))
+
+        translated_text = " ".join(translated_sentences)
 
         elapsed_ms = (time.monotonic_ns() - start_ns) / 1_000_000
 
@@ -94,6 +121,7 @@ class MarianMTEngine:
             segment_start_ms=transcript.segment_start_ms,
             segment_end_ms=transcript.segment_end_ms,
             processing_time_ms=elapsed_ms,
+            is_partial=transcript.is_partial,
             sequence_id=transcript.sequence_id,
         )
 
@@ -144,7 +172,7 @@ class MarianMTEngine:
         # Load CTranslate2 translator
         device_str = self._resolve_device()
         dev_type = DeviceType.CUDA if device_str == "cuda" else DeviceType.CPU
-        
+
         # Estimate VRAM (MarianMT is around ~300MB)
         vram_estimate = 300
 

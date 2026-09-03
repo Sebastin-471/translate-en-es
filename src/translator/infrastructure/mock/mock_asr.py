@@ -11,7 +11,6 @@ import time
 
 from translator.core.events import TranscriptResult, VADSegment
 
-
 _SAMPLE_TRANSCRIPTS = [
     "Hello, how are you today?",
     "The meeting will start in five minutes.",

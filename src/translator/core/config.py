@@ -43,9 +43,10 @@ class VADConfig:
 
     threshold: float = 0.5
     min_speech_duration_ms: int = 250
-    min_silence_duration_ms: int = 300
-    speech_pad_ms: int = 100
-    max_segment_duration_ms: int = 15_000
+    min_silence_duration_ms: int = 700
+    speech_pad_ms: int = 200
+    max_segment_duration_ms: int = 10_000
+    partial_interval_ms: int = 500
 
     def __post_init__(self) -> None:
         if not 0.0 < self.threshold < 1.0:
@@ -183,6 +184,14 @@ class PipelineConfig:
 
 
 @dataclass
+class ConfigConfig:
+    """Configuration system settings."""
+
+    watch_for_changes: bool = True
+    watch_interval_ms: int = 500
+
+
+@dataclass
 class AppConfig:
     """Top-level application configuration.
 
@@ -200,3 +209,4 @@ class AppConfig:
     hotkeys: HotkeyConfig = field(default_factory=HotkeyConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
+    config: ConfigConfig = field(default_factory=ConfigConfig)

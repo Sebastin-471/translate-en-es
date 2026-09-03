@@ -1,0 +1,27 @@
+# =============================================================================
+# translate-en-es — Development Configuration
+# =============================================================================
+# Extends base.yaml with development-friendly defaults.
+# Usage: TRANSLATOR_ENV=development python -m translator.app
+
+# Inherits all from base.yaml, overrides only what's needed for development:
+
+logging:
+  level: "DEBUG"
+  format: "console"
+  log_latencies: true
+
+pipeline:
+  mock_mode: true             # Use mock engines (no GPU/downloads required)
+  mock_delay_ms: 50           # Faster mock delays for rapid iteration
+  queue_size: 10              # Smaller queues for faster test feedback
+
+ui:
+  enabled: true
+  font_size: 18               # Smaller for debugging on small screens
+  max_lines: 2
+
+# Development-specific: enable auto-reload of config
+config:
+  watch_for_changes: true
+  watch_interval_ms: 500

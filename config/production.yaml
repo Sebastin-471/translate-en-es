@@ -1,0 +1,31 @@
+# =============================================================================
+# translate-en-es — Production Configuration
+# =============================================================================
+# Extends base.yaml with production-hardened defaults.
+# Usage: TRANSLATOR_ENV=production python -m translator.app
+
+# Inherits all from base.yaml, overrides only what's needed for production:
+
+logging:
+  level: "INFO"
+  format: "json"              # Structured JSON for log aggregation
+  file_path: "logs/translate-en-es.log"
+  log_latencies: true
+
+pipeline:
+  mock_mode: false            # Real engines in production
+  queue_size: 100             # Larger buffers for stability
+  mock_delay_ms: 100
+
+ui:
+  enabled: true
+  background_opacity: 0.85    # More opaque for readability
+  fade_after_seconds: 10.0    # Longer display time
+
+gpu:
+  max_vram_mb: 0              # Set to your GPU VRAM (e.g., 10240 for 10GB)
+  preload_models: true        # Pre-load to avoid first-request latency
+
+# Production: disable config hot-reload for stability
+config:
+  watch_for_changes: false

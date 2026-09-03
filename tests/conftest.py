@@ -6,10 +6,8 @@ and pre-populated queues for testing pipeline stages in isolation.
 
 from __future__ import annotations
 
-import asyncio
-import struct
 import math
-from pathlib import Path
+import struct
 
 import pytest
 
@@ -31,7 +29,6 @@ from translator.core.events import (
     TranslationResult,
     VADSegment,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test configuration
@@ -140,7 +137,7 @@ def sample_translation() -> TranslationResult:
 
 
 @pytest.fixture
-def mock_audio_source(test_config: AppConfig) -> "MockAudioSource":
+def mock_audio_source(test_config: AppConfig) -> MockAudioSource:
     """Pre-configured MockAudioSource."""
     from translator.infrastructure.mock.mock_audio import MockAudioSource
 
@@ -148,7 +145,7 @@ def mock_audio_source(test_config: AppConfig) -> "MockAudioSource":
 
 
 @pytest.fixture
-def mock_vad_engine() -> "MockVADEngine":
+def mock_vad_engine() -> MockVADEngine:
     """Pre-configured MockVADEngine with short segment interval."""
     from translator.infrastructure.mock.mock_vad import MockVADEngine
 
@@ -156,7 +153,7 @@ def mock_vad_engine() -> "MockVADEngine":
 
 
 @pytest.fixture
-def mock_asr_engine() -> "MockASREngine":
+def mock_asr_engine() -> MockASREngine:
     """Pre-configured MockASREngine."""
     from translator.infrastructure.mock.mock_asr import MockASREngine
 
@@ -164,7 +161,7 @@ def mock_asr_engine() -> "MockASREngine":
 
 
 @pytest.fixture
-def mock_mt_engine() -> "MockMTEngine":
+def mock_mt_engine() -> MockMTEngine:
     """Pre-configured MockMTEngine."""
     from translator.infrastructure.mock.mock_mt import MockMTEngine
 
@@ -172,7 +169,7 @@ def mock_mt_engine() -> "MockMTEngine":
 
 
 @pytest.fixture
-def mock_ui_renderer() -> "MockUIRenderer":
+def mock_ui_renderer() -> MockUIRenderer:
     """Pre-configured MockUIRenderer."""
     from translator.infrastructure.mock.mock_ui import MockUIRenderer
 
